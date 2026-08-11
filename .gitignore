@@ -1,0 +1,24 @@
+.DS_Store
+
+# Upstream source is retained locally as immutable audit input.  It contains
+# potentially sensitive sample configuration and must not be published here.
+/upstream/octavia-loxilb-driver/original/
+
+# Python and packaging artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+.venv/
+venv/
+
+# Local audit workspaces and unnormalized command output
+/.audit-work/
+*.raw.log
+
