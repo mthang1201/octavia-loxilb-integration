@@ -1,0 +1,10 @@
+#cloud-config
+hostname: client-1
+manage_etc_hosts: true
+package_update: true
+packages:
+  - curl
+  - jq
+  - netcat-openbsd
+  - iperf3
+final_message: "baseline client ready"

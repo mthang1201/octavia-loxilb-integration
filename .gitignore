@@ -22,3 +22,9 @@ venv/
 /.audit-work/
 *.raw.log
 
+# Generated lab configuration, credentials, state and validation output
+/lab/lab.env
+/lab/clouds.yaml
+/lab/generated/
+/lab/state/
+/lab/logs/

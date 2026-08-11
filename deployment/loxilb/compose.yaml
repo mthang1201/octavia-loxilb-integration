@@ -1,0 +1,12 @@
+services:
+  loxilb:
+    image: "${LOXILB_IMAGE:?set LOXILB_IMAGE to a release tag or digest}"
+    container_name: loxilb
+    restart: unless-stopped
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+    network_mode: host
+    volumes:
+      - /dev/log:/dev/log
+      - /var/lib/loxilb:/etc/loxilb
