@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "octavia-loxilb"
+version = "0.1.0"
+description = "OpenStack Octavia Provider Driver for LoxiLB"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [
+    { name = "Viettel IDC R&D Team" }
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "octavia-lib>=3.11.0",
+    "oslo.config>=9.0.0",
+    "oslo.log>=5.0.0",
+    "requests>=2.28.0",
+    "tenacity>=8.0.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "requests-mock>=1.10.0",
+]
+
+[project.entry-points."octavia.api.drivers"]
+loxilb = "octavia_loxilb.driver:LoxiLBProviderDriver"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["octavia_loxilb*"]
