@@ -1,0 +1,38 @@
+name: Octavia LoxiLB CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  unit-tests:
+    name: Unit Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -e ".[test]"
+
+      - name: Run Unit Tests with Coverage
+        run: |
+          pytest tests/unit/ -v --cov=octavia_loxilb --cov-report=term-missing --cov-report=xml
+
+      - name: Verify Stevedore Entrypoint Registration
+        run: |
+          python -c "import importlib.metadata; eps = importlib.metadata.entry_points(group='octavia.api.drivers'); assert any(ep.name == 'loxilb' for ep in eps), 'loxilb entrypoint not found!'"
