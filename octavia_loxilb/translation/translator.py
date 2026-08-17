@@ -178,6 +178,20 @@ def to_loxilb_service(
             probe_timeout = _get_field(healthmonitor, "timeout")
             probe_retries = _get_field(healthmonitor, "max_retries_down") or _get_field(healthmonitor, "max_retries")
 
+            # Determine probe port: HM probe_port -> first member port -> listener port
+            hm_probe_port = _get_field(healthmonitor, "probe_port") or _get_field(healthmonitor, "port")
+            if hm_probe_port is not None:
+                probeport = int(hm_probe_port)
+            elif members and len(members) > 0:
+                first_m_port = _get_field(members[0], "protocol_port")
+                probeport = int(first_m_port) if first_m_port else int(port)
+            elif pool is not None and _get_field(pool, "members"):
+                pool_members = _get_field(pool, "members")
+                first_m_port = _get_field(pool_members[0], "protocol_port") if pool_members else None
+                probeport = int(first_m_port) if first_m_port else int(port)
+            else:
+                probeport = int(port)
+
             # HTTP / HTTPS probe specifics
             if hm_type in [lib_consts.HEALTH_MONITOR_HTTP, lib_consts.HEALTH_MONITOR_HTTPS]:
                 url_path = _get_field(healthmonitor, "url_path", "/")

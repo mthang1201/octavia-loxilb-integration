@@ -63,6 +63,7 @@ def test_to_loxilb_service_full_tree(sample_loadbalancer, sample_listener):
     assert entry.serviceArguments.sel == constants.LOXILB_SEL_ROUND_ROBIN
     assert entry.serviceArguments.monitor is True
     assert entry.serviceArguments.probetype == "tcp"
+    assert entry.serviceArguments.probeport == 8080
     assert len(entry.endpoints) == 2
     assert entry.endpoints[0].endpointIP == "10.0.0.11"
     assert entry.endpoints[0].targetPort == 8080

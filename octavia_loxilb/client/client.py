@@ -1,5 +1,6 @@
 """LoxiLB REST API Client."""
 
+import os
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -18,10 +19,25 @@ LOG = logging.getLogger(__name__)
 class LoxiLBClient:
     """Client for communicating with the LoxiLB REST API."""
 
-    def __init__(self, config: Optional[cfg.ConfigOpts] = None):
+    def __init__(self, config: Optional[Any] = None):
         """Initialize the LoxiLB REST API client."""
-        self.config = config or cfg.CONF.loxilb
-        self.endpoints = self._parse_endpoints(self.config.api_endpoints)
+        if config is None:
+            try:
+                from octavia_loxilb.common.config import register_opts
+                register_opts(cfg.CONF)
+            except (cfg.DuplicateOptError, cfg.ArgsAlreadyParsedError):
+                pass
+            if not getattr(cfg.CONF, "config_file", None) and os.path.exists("/etc/octavia/octavia.conf"):
+                try:
+                    cfg.CONF(["--config-file", "/etc/octavia/octavia.conf"])
+                except Exception:
+                    pass
+            self.config = getattr(cfg.CONF, "loxilb", None)
+        else:
+            self.config = config
+
+        raw_endpoints = getattr(self.config, "api_endpoints", ["http://127.0.0.1:11111"]) if self.config else ["http://127.0.0.1:11111"]
+        self.endpoints = self._parse_endpoints(raw_endpoints)
         self.current_endpoint_index = 0
         self.session = self._create_session()
         self._setup_authentication()
@@ -240,7 +256,7 @@ class LoxiLBClient:
         try:
             response = self._request("GET", constants.API_PATH_LOADBALANCER_ALL)
             data = response.json() if response.content else {}
-            return data.get("lbServices", [])
+            return data.get("lbAttr") or data.get("lbServices") or []
         except exceptions.LoxiLBNotFoundException:
             return []
 

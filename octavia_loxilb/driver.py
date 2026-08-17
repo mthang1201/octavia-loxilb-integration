@@ -108,7 +108,15 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             bgp_enabled=bgp_enabled,
             snat_enabled=snat_enabled,
         )
-        self.client.create_loadbalancer(entry)
+        if entry.endpoints:
+            self.client.create_loadbalancer(entry)
+        else:
+            # LoxiLB requires >=1 endpoint to activate dataplane rule; if empty, clean up any existing rule
+            ext_ip = entry.serviceArguments.externalIP
+            port = entry.serviceArguments.port
+            proto = entry.serviceArguments.protocol
+            if ext_ip and port and proto:
+                self.client.delete_loadbalancer(ext_ip, port, proto)
 
     # -------------------------------------------------------------------------
     # LoadBalancer Operations
@@ -183,8 +191,9 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
         else:
             self._reconcile_service(loadbalancer=lb, listener=listener)
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
         self.status_syncer.update_listener_status(
-            listener_id, provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE
+            listener_id, provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE, lb_id=lb_id
         )
 
     def listener_update(self, old_listener: Any, new_listener: Any) -> None:
@@ -195,8 +204,9 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
         if lb is not None:
             self._reconcile_service(loadbalancer=lb, listener=new_listener)
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
         self.status_syncer.update_listener_status(
-            listener_id, provisioning_status=lib_consts.ACTIVE
+            listener_id, provisioning_status=lib_consts.ACTIVE, lb_id=lb_id
         )
 
     def listener_delete(self, listener: Any) -> None:
@@ -214,8 +224,9 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             name = generate_service_name(lb, listener)
             self.client.delete_loadbalancer_by_name(name)
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
         self.status_syncer.update_listener_status(
-            listener_id, provisioning_status=lib_consts.DELETED
+            listener_id, provisioning_status=lib_consts.DELETED, lb_id=lb_id
         )
 
     # -------------------------------------------------------------------------
@@ -231,8 +242,10 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
         if lb is not None and listener is not None:
             self._reconcile_service(loadbalancer=lb, listener=listener, pool=pool)
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
         self.status_syncer.update_pool_status(
-            pool_id, provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE
+            pool_id, provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE, lb_id=lb_id, listener_id=listener_id
         )
 
     def pool_update(self, old_pool: Any, new_pool: Any) -> None:
@@ -244,8 +257,10 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
         if lb is not None and listener is not None:
             self._reconcile_service(loadbalancer=lb, listener=listener, pool=new_pool)
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
         self.status_syncer.update_pool_status(
-            pool_id, provisioning_status=lib_consts.ACTIVE
+            pool_id, provisioning_status=lib_consts.ACTIVE, lb_id=lb_id, listener_id=listener_id
         )
 
     def pool_delete(self, pool: Any) -> None:
@@ -258,8 +273,10 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             # Reconcile listener with empty pool
             self._reconcile_service(loadbalancer=lb, listener=listener, pool=None, members=[])
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
         self.status_syncer.update_pool_status(
-            pool_id, provisioning_status=lib_consts.DELETED
+            pool_id, provisioning_status=lib_consts.DELETED, lb_id=lb_id, listener_id=listener_id
         )
 
     # -------------------------------------------------------------------------
@@ -278,6 +295,8 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             except Exception as e:
                 LOG.debug("Could not get pool %s: %s", pool_id, e)
 
+        lb = None
+        listener = None
         if pool is not None:
             lb = self._resolve_loadbalancer(pool)
             listener = self._resolve_listener(pool)
@@ -287,8 +306,10 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
                     members = list(members) + [member]
                 self._reconcile_service(loadbalancer=lb, listener=listener, pool=pool, members=members)
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
         self.status_syncer.update_member_status(
-            member_id, provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE
+            member_id, provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE, lb_id=lb_id, pool_id=pool_id, listener_id=listener_id
         )
 
     def member_update(self, old_member: Any, new_member: Any) -> None:
@@ -303,14 +324,18 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             except Exception as e:
                 LOG.debug("Could not get pool %s: %s", pool_id, e)
 
+        lb = None
+        listener = None
         if pool is not None:
             lb = self._resolve_loadbalancer(pool)
             listener = self._resolve_listener(pool)
             if lb is not None and listener is not None:
                 self._reconcile_service(loadbalancer=lb, listener=listener, pool=pool)
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
         self.status_syncer.update_member_status(
-            member_id, provisioning_status=lib_consts.ACTIVE
+            member_id, provisioning_status=lib_consts.ACTIVE, lb_id=lb_id, pool_id=pool_id, listener_id=listener_id
         )
 
     def member_delete(self, member: Any) -> None:
@@ -325,6 +350,8 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             except Exception as e:
                 LOG.debug("Could not get pool %s: %s", pool_id, e)
 
+        lb = None
+        listener = None
         if pool is not None:
             lb = self._resolve_loadbalancer(pool)
             listener = self._resolve_listener(pool)
@@ -332,8 +359,10 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
                 members = [m for m in _get_field(pool, "members", []) if (_get_field(m, "member_id") or _get_field(m, "id")) != member_id]
                 self._reconcile_service(loadbalancer=lb, listener=listener, pool=pool, members=members)
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
         self.status_syncer.update_member_status(
-            member_id, provisioning_status=lib_consts.DELETED
+            member_id, provisioning_status=lib_consts.DELETED, lb_id=lb_id, pool_id=pool_id, listener_id=listener_id
         )
 
     def member_batch_update(self, pool_id: str, members: list[Any]) -> None:
@@ -346,18 +375,30 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             except Exception as e:
                 LOG.debug("Could not get pool %s: %s", pool_id, e)
 
+        lb = None
+        listener = None
         if pool is not None:
             lb = self._resolve_loadbalancer(pool)
             listener = self._resolve_listener(pool)
             if lb is not None and listener is not None:
                 self._reconcile_service(loadbalancer=lb, listener=listener, pool=pool, members=members)
 
-        for member in members:
-            m_id = _get_field(member, "member_id") or _get_field(member, "id")
-            if m_id:
-                self.status_syncer.update_member_status(
-                    m_id, provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE
-                )
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
+        payload_members = [
+            {"id": _get_field(m, "member_id") or _get_field(m, "id"),
+             "provisioning_status": lib_consts.ACTIVE,
+             "operating_status": lib_consts.ONLINE}
+            for m in members if (_get_field(m, "member_id") or _get_field(m, "id"))
+        ]
+        status_dict: dict[str, list[dict[str, Any]]] = {"members": payload_members}
+        if pool_id:
+            status_dict["pools"] = [{"id": pool_id, "provisioning_status": lib_consts.ACTIVE}]
+        if listener_id:
+            status_dict["listeners"] = [{"id": listener_id, "provisioning_status": lib_consts.ACTIVE}]
+        if lb_id:
+            status_dict["loadbalancers"] = [{"id": lb_id, "provisioning_status": lib_consts.ACTIVE}]
+        self.status_syncer.update_status(status_dict)
 
     # -------------------------------------------------------------------------
     # HealthMonitor Operations
@@ -375,6 +416,8 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             except Exception as e:
                 LOG.debug("Could not get pool %s: %s", pool_id, e)
 
+        lb = None
+        listener = None
         if pool is not None:
             lb = self._resolve_loadbalancer(pool)
             listener = self._resolve_listener(pool)
@@ -383,8 +426,10 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
                     loadbalancer=lb, listener=listener, pool=pool, healthmonitor=healthmonitor
                 )
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
         self.status_syncer.update_healthmonitor_status(
-            hm_id, provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE
+            hm_id, provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE, lb_id=lb_id, pool_id=pool_id, listener_id=listener_id
         )
 
     def health_monitor_update(self, old_healthmonitor: Any, new_healthmonitor: Any) -> None:
@@ -399,6 +444,8 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             except Exception as e:
                 LOG.debug("Could not get pool %s: %s", pool_id, e)
 
+        lb = None
+        listener = None
         if pool is not None:
             lb = self._resolve_loadbalancer(pool)
             listener = self._resolve_listener(pool)
@@ -407,8 +454,10 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
                     loadbalancer=lb, listener=listener, pool=pool, healthmonitor=new_healthmonitor
                 )
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
         self.status_syncer.update_healthmonitor_status(
-            hm_id, provisioning_status=lib_consts.ACTIVE
+            hm_id, provisioning_status=lib_consts.ACTIVE, lb_id=lb_id, pool_id=pool_id, listener_id=listener_id
         )
 
     def health_monitor_delete(self, healthmonitor: Any) -> None:
@@ -423,6 +472,8 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
             except Exception as e:
                 LOG.debug("Could not get pool %s: %s", pool_id, e)
 
+        lb = None
+        listener = None
         if pool is not None:
             lb = self._resolve_loadbalancer(pool)
             listener = self._resolve_listener(pool)
@@ -431,8 +482,10 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
                     loadbalancer=lb, listener=listener, pool=pool, healthmonitor=None
                 )
 
+        lb_id = _get_field(lb, "loadbalancer_id") or _get_field(lb, "id") if lb else None
+        listener_id = _get_field(listener, "listener_id") or _get_field(listener, "id") if listener else None
         self.status_syncer.update_healthmonitor_status(
-            hm_id, provisioning_status=lib_consts.DELETED
+            hm_id, provisioning_status=lib_consts.DELETED, lb_id=lb_id, pool_id=pool_id, listener_id=listener_id
         )
 
     # -------------------------------------------------------------------------
@@ -485,9 +538,12 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
         project_id: str,
         vip_dictionary: dict[str, Any],
         additional_vip_dicts: Optional[list[dict[str, Any]]] = None,
-    ) -> Optional[dict[str, Any]]:
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Let Octavia/Neutron own VIP port creation."""
-        return None
+        raise driver_exceptions.NotImplementedError(
+            user_fault_string="VIP port creation is managed by Octavia.",
+            operator_fault_string="create_vip_port not implemented by LoxiLB driver",
+        )
 
     def validate_flavor(self, flavor_metadata: dict[str, Any]) -> bool:
         """Validate flavor metadata."""

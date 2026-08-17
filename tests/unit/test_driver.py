@@ -51,7 +51,7 @@ def test_driver_listener_create(driver, driver_mocks, sample_loadbalancer, sampl
     driver.listener_create(sample_listener)
     mock_client.create_loadbalancer.assert_called_once()
     mock_syncer.update_listener_status.assert_called_once_with(
-        "listener-1111", provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE
+        "listener-1111", provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE, lb_id="lb-1111"
     )
 
 
@@ -63,7 +63,7 @@ def test_driver_listener_delete(driver, driver_mocks, sample_loadbalancer, sampl
         external_ip="192.168.50.200", port=80, protocol="tcp"
     )
     mock_syncer.update_listener_status.assert_called_once_with(
-        "listener-1111", provisioning_status=lib_consts.DELETED
+        "listener-1111", provisioning_status=lib_consts.DELETED, lb_id="lb-1111"
     )
 
 
@@ -74,7 +74,7 @@ def test_driver_pool_create(driver, driver_mocks, sample_loadbalancer, sample_li
     driver.pool_create(sample_pool)
     mock_client.create_loadbalancer.assert_called_once()
     mock_syncer.update_pool_status.assert_called_once_with(
-        "pool-1111", provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE
+        "pool-1111", provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE, lb_id="lb-1111", listener_id="listener-1111"
     )
 
 
@@ -86,7 +86,7 @@ def test_driver_member_batch_update(driver, driver_mocks, sample_loadbalancer, s
 
     driver.member_batch_update("pool-1111", sample_members)
     mock_client.create_loadbalancer.assert_called_once()
-    assert mock_syncer.update_member_status.call_count == len(sample_members)
+    mock_syncer.update_status.assert_called_once()
 
 
 def test_driver_health_monitor_create(driver, driver_mocks, sample_loadbalancer, sample_listener, sample_pool, sample_healthmonitor):
@@ -98,7 +98,7 @@ def test_driver_health_monitor_create(driver, driver_mocks, sample_loadbalancer,
     driver.health_monitor_create(sample_healthmonitor)
     mock_client.create_loadbalancer.assert_called_once()
     mock_syncer.update_healthmonitor_status.assert_called_once_with(
-        "hm-1111", provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE
+        "hm-1111", provisioning_status=lib_consts.ACTIVE, operating_status=lib_consts.ONLINE, lb_id="lb-1111", pool_id="pool-1111", listener_id="listener-1111"
     )
 
 
@@ -113,4 +113,5 @@ def test_driver_l7_unsupported(driver):
 def test_driver_metadata_validation(driver):
     assert driver.validate_flavor({"name": "test"}) is True
     assert driver.validate_availability_zone({"name": "zone-1"}) is True
-    assert driver.create_vip_port("lb-1", "p-1", {"ip_address": "10.0.0.1"}) is None
+    with pytest.raises(driver_exceptions.NotImplementedError):
+        driver.create_vip_port("lb-1", "p-1", {"ip_address": "10.0.0.1"})
