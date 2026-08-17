@@ -14,6 +14,8 @@ def test_config_registration():
     assert opt_map["api_retries"] == constants.DEFAULT_API_RETRIES
     assert opt_map["auth_type"] == constants.AUTH_TYPE_NONE
     assert opt_map["default_nat_mode"] == "onearm"
+    assert opt_map["stats_enabled"] is True
+    assert opt_map["stats_interval"] == 5
 
 
 def test_config_validation_success(mock_conf):

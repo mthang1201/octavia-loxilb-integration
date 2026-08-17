@@ -1,0 +1,13 @@
+Running 10s test @ http://10.0.0.10:8080/
+  4 threads and 50 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency    27.89ms  122.25ms   1.68s    97.01%
+    Req/Sec   200.46    121.24     1.10k    95.56%
+  Latency Distribution
+     50%    6.87ms
+     75%   15.79ms
+     90%   27.91ms
+     99%  681.69ms
+  7186 requests in 10.06s, 1.03MB read
+Requests/sec:    714.37
+Transfer/sec:    105.36KB

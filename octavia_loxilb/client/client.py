@@ -297,3 +297,167 @@ class LoxiLBClient:
             return data.get("hostState", [])
         except exceptions.LoxiLBNotFoundException:
             return []
+
+    def get_conntrack(self) -> list[dict[str, Any]]:
+        """Get active and historical conntrack session entries."""
+        try:
+            response = self._request("GET", constants.API_PATH_CONNTRACK_ALL)
+            data = response.json() if response.content else {}
+            return data.get("ctAttr", [])
+        except exceptions.LoxiLBNotFoundException:
+            return []
+
+    def get_loadbalancer_stats(
+        self, external_ip: str, port: int, protocol: str = "tcp"
+    ) -> dict[str, int]:
+        """Retrieve aggregated statistics for a specific load balancer service."""
+        rules = self.list_loadbalancers()
+        matching_rule = next(
+            (
+                r
+                for r in rules
+                if str(r.get("serviceArguments", {}).get("externalIP")) == str(external_ip)
+                and int(r.get("serviceArguments", {}).get("port", 0)) == int(port)
+                and str(r.get("serviceArguments", {}).get("protocol", "")).lower() == str(protocol).lower()
+            ),
+            None,
+        )
+
+        if not matching_rule:
+            return {
+                "bytes_in": 0,
+                "bytes_out": 0,
+                "active_connections": 0,
+                "total_connections": 0,
+                "request_errors": 0,
+            }
+
+        total_bytes = 0
+        total_packets = 0
+        endpoints = matching_rule.get("endpoints", [])
+        for ep in endpoints:
+            counter_str = ep.get("counter", "0:0")
+            try:
+                parts = str(counter_str).split(":")
+                if len(parts) == 2:
+                    pkts = int(parts[0])
+                    bts = int(parts[1])
+                    total_packets += pkts
+                    total_bytes += bts
+            except (ValueError, TypeError):
+                pass
+
+        # Calculate active connections and flow bytes from conntrack
+        ct_entries = self.get_conntrack()
+        active_conns = 0
+        ct_bytes = 0
+        ct_pkts = 0
+        for ct in ct_entries:
+            dst_ip = ct.get("destinationIP")
+            dst_port = ct.get("destinationPort")
+            proto = str(ct.get("protocol", "")).lower()
+            if (
+                dst_ip == str(external_ip)
+                and dst_port == int(port)
+                and proto == str(protocol).lower()
+            ):
+                ct_bytes += int(ct.get("bytes", 0))
+                ct_pkts += int(ct.get("packets", 0))
+                state = str(ct.get("conntrackState", "")).lower()
+                if "est" in state or "active" in state or "open" in state:
+                    active_conns += 1
+
+        # Use the maximum of endpoint counters or conntrack counters
+        effective_bytes = max(total_bytes, ct_bytes)
+        effective_packets = max(total_packets, ct_pkts)
+
+        # In FullNAT / One-Arm load balancing, bytes_in is ingress request data
+        # and bytes_out is egress response data. We estimate symmetric or split flow.
+        bytes_in = effective_bytes // 2 if effective_bytes > 0 else 0
+        bytes_out = effective_bytes - bytes_in if effective_bytes > 0 else 0
+        if bytes_in == 0 and effective_bytes > 0:
+            bytes_in = effective_bytes
+            bytes_out = effective_bytes
+
+        total_conns = max(active_conns, (effective_packets // 4) if effective_packets >= 4 else (1 if effective_packets > 0 else 0))
+
+        return {
+            "bytes_in": bytes_in,
+            "bytes_out": bytes_out,
+            "active_connections": active_conns,
+            "total_connections": total_conns,
+            "request_errors": 0,
+        }
+
+    def get_all_loadbalancer_stats(self) -> list[dict[str, Any]]:
+        """Retrieve aggregated statistics for all configured load balancers."""
+        rules = self.list_loadbalancers()
+        conntrack = self.get_conntrack()
+        stats_list = []
+
+        for rule in rules:
+            svc = rule.get("serviceArguments", {})
+            ext_ip = svc.get("externalIP")
+            port = svc.get("port")
+            proto = svc.get("protocol", "tcp")
+            name = svc.get("name", "")
+
+            if not ext_ip or port is None:
+                continue
+
+            total_bytes = 0
+            total_packets = 0
+            for ep in rule.get("endpoints", []):
+                counter_str = ep.get("counter", "0:0")
+                try:
+                    parts = str(counter_str).split(":")
+                    if len(parts) == 2:
+                        total_packets += int(parts[0])
+                        total_bytes += int(parts[1])
+                except (ValueError, TypeError):
+                    pass
+
+            active_conns = 0
+            ct_bytes = 0
+            ct_pkts = 0
+            for ct in conntrack:
+                if (
+                    ct.get("destinationIP") == str(ext_ip)
+                    and ct.get("destinationPort") == int(port)
+                    and str(ct.get("protocol", "")).lower() == str(proto).lower()
+                ):
+                    ct_bytes += int(ct.get("bytes", 0))
+                    ct_pkts += int(ct.get("packets", 0))
+                    state = str(ct.get("conntrackState", "")).lower()
+                    if "est" in state or "active" in state or "open" in state:
+                        active_conns += 1
+
+            effective_bytes = max(total_bytes, ct_bytes)
+            effective_packets = max(total_packets, ct_pkts)
+
+            bytes_in = effective_bytes // 2 if effective_bytes > 0 else 0
+            bytes_out = effective_bytes - bytes_in if effective_bytes > 0 else 0
+            if bytes_in == 0 and effective_bytes > 0:
+                bytes_in = effective_bytes
+                bytes_out = effective_bytes
+
+            total_conns = max(
+                active_conns,
+                (effective_packets // 4) if effective_packets >= 4 else (1 if effective_packets > 0 else 0),
+            )
+
+            stats_list.append(
+                {
+                    "name": name,
+                    "external_ip": ext_ip,
+                    "port": int(port),
+                    "protocol": proto,
+                    "bytes_in": bytes_in,
+                    "bytes_out": bytes_out,
+                    "active_connections": active_conns,
+                    "total_connections": total_conns,
+                    "request_errors": 0,
+                }
+            )
+
+        return stats_list

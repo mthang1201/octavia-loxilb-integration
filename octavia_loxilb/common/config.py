@@ -114,6 +114,16 @@ LOXILB_OPTS = [
         default=False,
         help="Whether SNAT is enabled for service rules in LoxiLB.",
     ),
+    cfg.BoolOpt(
+        "stats_enabled",
+        default=True,
+        help="Whether periodic statistics collection from LoxiLB is enabled.",
+    ),
+    cfg.IntOpt(
+        "stats_interval",
+        default=5,
+        help="Interval in seconds for periodic statistics synchronization.",
+    ),
 ]
 
 

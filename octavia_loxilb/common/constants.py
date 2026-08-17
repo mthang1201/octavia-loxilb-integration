@@ -20,6 +20,8 @@ API_PATH_LOADBALANCER_ALL = "/netlox/v1/config/loadbalancer/all"
 API_PATH_ENDPOINT = "/netlox/v1/config/endpoint"
 API_PATH_ENDPOINT_ALL = "/netlox/v1/config/endpoint/all"
 API_PATH_ENDPOINT_HOST_STATE = "/netlox/v1/config/endpointhoststate"
+API_PATH_CONNTRACK_ALL = "/netlox/v1/config/conntrack/all"
+API_PATH_PORT_ALL = "/netlox/v1/config/port/all"
 
 # Authentication types
 AUTH_TYPE_NONE = "none"

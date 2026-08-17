@@ -14,6 +14,7 @@ def mock_conf():
     conf = cfg.ConfigOpts()
     config.register_opts(conf)
     conf.set_override("api_endpoints", ["http://192.168.50.111:11111"], group="loxilb")
+    conf.set_override("auth_type", "none", group="loxilb")
     conf.set_override("api_timeout", 5, group="loxilb")
     conf.set_override("api_retries", 2, group="loxilb")
     conf.set_override("api_retry_interval", 1, group="loxilb")

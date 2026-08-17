@@ -11,7 +11,7 @@ from oslo_log import log as logging
 
 from octavia_loxilb.client.client import LoxiLBClient
 from octavia_loxilb.common import config, constants, exceptions
-from octavia_loxilb.status.synchronizer import StatusSynchronizer
+from octavia_loxilb.status.synchronizer import StatsCollector, StatusSynchronizer
 from octavia_loxilb.translation.translator import (
     _get_field,
     generate_service_name,
@@ -45,6 +45,20 @@ class LoxiLBProviderDriver(provider_base.ProviderDriver):
         self.status_syncer = status_syncer or StatusSynchronizer(
             config=self.config, driver_lib_instance=driver_lib_instance
         )
+
+        # Initialize background statistics collector
+        self.stats_collector: Optional[StatsCollector] = None
+        stats_enabled = getattr(self.config, "stats_enabled", True)
+        stats_interval = getattr(self.config, "stats_interval", 5)
+        if stats_enabled:
+            self.stats_collector = StatsCollector(
+                status_syncer=self.status_syncer,
+                client=self.client,
+                interval=stats_interval,
+            )
+            if self.status_syncer.driver_lib is not None:
+                self.stats_collector.start()
+
         LOG.info("LoxiLBProviderDriver initialized successfully (version: %s)", constants.DRIVER_VERSION)
 
     @property
